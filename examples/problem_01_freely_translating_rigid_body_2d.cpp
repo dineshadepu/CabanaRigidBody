@@ -153,7 +153,7 @@ auto print_rigid_body_properties(auto particles){
     {
       std::cout << "body " << i << " has following properties: "
                 << std::endl
-                <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1)
+                <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1) << ", " << x_cm(i, 2)
                 << std::endl
                 << "A total mass of " << m_cm(i)
                 << std::endl;
@@ -165,6 +165,9 @@ auto print_rigid_body_properties(auto particles){
           std::cout <<  rot_mat_cm(i, j) << ", " ;
         }
       std::cout << std::endl;
+      std::cout << "===========================" << std::endl;
+      std::cout << "===========================" << std::endl;
+      std::cout << "===========================" << std::endl;
 
       // std::cout << "Moment of inertia matrix of " << i << " is:"
       //           << std::endl;
@@ -205,13 +208,14 @@ void Problem01FreelyTranslatingRigidBody2D( double body_length_, double body_hei
   double body_spacing = body_spacing_;
   double hdx = 1.;
   double h = hdx * body_spacing;
-  // // =================================================================
-  // //                   2. create the particles
-  // // =================================================================
+  // =================================================================
+  //                   2. create the particles
+  // =================================================================
   auto particles = create_particles<MemorySpace, ExecutionSpace>(body_length,
                                                                  body_height,
                                                                  body_spacing);
   particles.setup_rigid_body_properties();
+  print_rigid_body_properties(particles);
   double lin_vel[3] = {0.0, 0.0, 0.0};
   double ang_vel[3] = {0.0, 0.0, 2. * M_PI};
   // double ang_vel[3] = {0.0, 0.0, 1.};

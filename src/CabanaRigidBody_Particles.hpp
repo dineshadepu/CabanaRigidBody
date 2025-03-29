@@ -275,7 +275,7 @@ namespace CabanaRigidBody
       return Cabana::slice<0>( _ang_mom_cm, "ang_mom_cm" );
     }
     auto sliceAng_mom() const {
-      return Cabana::slice<0>( _ang_mom_cm, "torque_cm" );
+      return Cabana::slice<0>( _ang_mom_cm, "ang_mom_cm" );
     }
 
     void resize(const std::size_t n, const std::size_t p)
@@ -307,7 +307,7 @@ namespace CabanaRigidBody
       _moi_inv_global_mat_cm.resize( p );
       _force_cm.resize( p );
       _torque_cm.resize( p );
-
+      _ang_mom_cm.resize( p );
     }
 
     /// Todo: Change this function to GPU
