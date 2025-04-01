@@ -54,7 +54,7 @@ namespace CabanaRigidBody
       auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
       auto force_cm = particles.sliceForce_cm();
       auto torque_cm = particles.sliceTorque_cm();
-      auto ang_mom_cm = particles.sliceTorque_cm();
+      auto ang_mom_cm = particles.sliceAng_mom_cm();
 
       auto dt = _dt;
       // Update the rigid body properties
@@ -200,14 +200,14 @@ namespace CabanaRigidBody
           R_t[8] = R[8];
 
           // copy moi to local matrix
-          double tmp_moi_inv[9] = {0};
+          double tmp_moi_inv[9] = {0.};
           for ( std::size_t j = 0; j < 9; ++j )
             {
               tmp_moi_inv[j] = moi_inv_body_mat_cm( i, j );
             }
 
-          double R_moi[9] = {0};
-          double new_moi[9] = {0};
+          double R_moi[9] = {0.};
+          double new_moi[9] = {0.};
           R_moi[0] = R[0] * tmp_moi_inv[0] + R[1] * tmp_moi_inv[3] + R[2] * tmp_moi_inv[6];
           R_moi[1] = R[0] * tmp_moi_inv[1] + R[1] * tmp_moi_inv[4] + R[2] * tmp_moi_inv[7];
           R_moi[2] = R[0] * tmp_moi_inv[2] + R[1] * tmp_moi_inv[5] + R[2] * tmp_moi_inv[8];
@@ -262,9 +262,13 @@ namespace CabanaRigidBody
           x_p ( i, 1 ) = x_cm ( bid_i, 1 ) + dy;
           x_p ( i, 2 ) = x_cm ( bid_i, 2 ) + dz;
 
-          // u_p ( i, 0 ) = u_cm ( bid_i, 0 );
-          // u_p ( i, 1 ) = u_cm ( bid_i, 1 );
-          // u_p ( i, 2 ) = u_cm ( bid_i, 2 );
+          auto du = w_cm ( bid_i,  1 ) * dz - w_cm ( bid_i,  2 ) * dy;
+          auto dv = w_cm ( bid_i,  2 ) * dx - w_cm ( bid_i,  0 ) * dz;
+          auto dw = w_cm ( bid_i,  0 ) * dy - w_cm ( bid_i,  1 ) * dx;
+
+          u_p ( i, 0 ) = u_cm ( bid_i,  1 ) + du;
+          u_p ( i, 1 ) = u_cm ( bid_i,  2 ) + dv;
+          u_p ( i, 2 ) = u_cm ( bid_i,  0 ) + dw;
         };
 
       Kokkos::RangePolicy<ExecutionSpace> policy1( 0, x_p.size() );

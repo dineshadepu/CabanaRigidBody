@@ -846,6 +846,120 @@ namespace CabanaRigidBody
     // Cabana::Experimental::HDF5ParticleOutput::HDF5Config h5_config;
   };
 
+
+auto print_particle_properties(auto particles){
+  auto x_p = particles->slicePosition();
+  auto u_p = particles->sliceVelocity();
+  auto au_p = particles->sliceAcceleration();
+  auto force_p = particles->sliceForce();
+  auto m_p = particles->sliceMass();
+  auto rho_p = particles->sliceDensity();
+  auto p_p = particles->slicePressure();
+  auto h_p = particles->sliceH();
+  auto wij_p = particles->sliceWij();
+  auto arho_p = particles->sliceArho();
+  auto x_body_p = particles.sliceX_body();
+  auto u_body_p = particles.sliceU_body();
+  auto body_id_p = particles.sliceBody_id();
+
+
+  for ( std::size_t i = 0; i < x_p.size(); ++i )
+    {
+      std::cout << "position, mass, h_val, real_sin, sin_appr of particle " << i << " are: "
+                << x_p(i, 0) << ", "
+                <<  m_p(i) << ", "
+                <<  h_p(i) << ", "
+                <<  wij_p(i) << ", "
+                <<  p_p(i) << ", "
+                << std::endl;
+    }
+}
+
+
+auto print_rigid_body_properties(auto particles){
+  auto x_p = particles.slicePosition();
+  auto u_p = particles.sliceVelocity();
+  auto au_p = particles.sliceAcceleration();
+  auto force_p = particles.sliceForce();
+  auto m_p = particles.sliceMass();
+  auto rho_p = particles.sliceDensity();
+  auto p_p = particles.slicePressure();
+  auto h_p = particles.sliceH();
+  auto wij_p = particles.sliceWij();
+  auto arho_p = particles.sliceArho();
+  auto x_body_p = particles.sliceX_body();
+  auto body_id_p = particles.sliceBody_id();
+
+  auto rb_limits = particles.sliceRb_limits();
+  auto m_cm = particles.sliceM_cm();
+  auto x_cm = particles.sliceX_cm();
+  auto u_cm = particles.sliceU_cm();
+  auto w_cm = particles.sliceW_cm();
+  auto rot_mat_cm = particles.sliceRot_mat_cm();
+  auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
+  auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
+  auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
+  auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
+  auto force_cm = particles.sliceForce_cm();
+  auto torque_cm = particles.sliceTorque_cm();
+  auto ang_mom_cm = particles.sliceAng_mom_cm();
+
+  for ( std::size_t i = 0; i < m_cm.size(); ++i )
+    {
+      std::cout << "body " << i << " has following properties: "
+                << std::endl
+                <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1) << ", " << x_cm(i, 2)
+                << std::endl
+                << "A total mass of " << m_cm(i)
+                << std::endl;
+
+      std::cout << "Rotation matrix of " << i << " is:"
+                << std::endl;
+      for ( std::size_t j = 0; j < 9; ++j )
+        {
+          std::cout <<  rot_mat_cm(i, j) << ", " ;
+        }
+      std::cout << std::endl;
+
+      std::cout << "Ang velocity of " << i << " is:"
+                << std::endl;
+      for ( std::size_t j = 0; j < 3; ++j )
+        {
+          std::cout <<  w_cm(i, j) << ", " ;
+        }
+      std::cout << std::endl;
+
+      std::cout << "Angular momentum of " << i << " is:"
+                << std::endl;
+      for ( std::size_t j = 0; j < 3; ++j )
+        {
+          std::cout <<  ang_mom_cm(i, j) << ", " ;
+        }
+      std::cout << std::endl;
+
+      std::cout << "MOI inv global mat cm of " << i << " is:"
+                << std::endl;
+      for ( std::size_t j = 0; j < 9; ++j )
+        {
+          std::cout <<  moi_inv_global_mat_cm(i, j) << ", " ;
+        }
+      std::cout << std::endl;
+      std::cout << "===========================" << std::endl;
+      std::cout << "===========================" << std::endl;
+      std::cout << "===========================" << std::endl;
+
+      // std::cout << "Moment of inertia matrix of " << i << " is:"
+      //           << std::endl;
+      // for ( std::size_t j = 0; j < 9; ++j )
+      //   {
+      //     std::cout <<  moi_body_mat_cm(i, j) << ", " ;
+      //   }
+      // std::cout << std::endl;
+    }
+}
+
+
+
 } // namespace CabanaRigidBody
 
 #endif

@@ -92,95 +92,6 @@ auto create_particles(double body_length, double body_height, double body_spacin
 }
 
 
-auto print_particle_properties(auto particles){
-  auto x_p = particles->slicePosition();
-  auto u_p = particles->sliceVelocity();
-  auto au_p = particles->sliceAcceleration();
-  auto force_p = particles->sliceForce();
-  auto m_p = particles->sliceMass();
-  auto rho_p = particles->sliceDensity();
-  auto p_p = particles->slicePressure();
-  auto h_p = particles->sliceH();
-  auto wij_p = particles->sliceWij();
-  auto arho_p = particles->sliceArho();
-  auto x_body_p = particles.sliceX_body();
-  auto u_body_p = particles.sliceU_body();
-  auto body_id_p = particles.sliceBody_id();
-
-
-  for ( std::size_t i = 0; i < x_p.size(); ++i )
-    {
-      std::cout << "position, mass, h_val, real_sin, sin_appr of particle " << i << " are: "
-                << x_p(i, 0) << ", "
-                <<  m_p(i) << ", "
-                <<  h_p(i) << ", "
-                <<  wij_p(i) << ", "
-                <<  p_p(i) << ", "
-                << std::endl;
-    }
-}
-
-
-auto print_rigid_body_properties(auto particles){
-  auto x_p = particles.slicePosition();
-  auto u_p = particles.sliceVelocity();
-  auto au_p = particles.sliceAcceleration();
-  auto force_p = particles.sliceForce();
-  auto m_p = particles.sliceMass();
-  auto rho_p = particles.sliceDensity();
-  auto p_p = particles.slicePressure();
-  auto h_p = particles.sliceH();
-  auto wij_p = particles.sliceWij();
-  auto arho_p = particles.sliceArho();
-  auto x_body_p = particles.sliceX_body();
-  auto body_id_p = particles.sliceBody_id();
-
-  auto rb_limits = particles.sliceRb_limits();
-  auto m_cm = particles.sliceM_cm();
-  auto x_cm = particles.sliceX_cm();
-  auto u_cm = particles.sliceU_cm();
-  auto w_cm = particles.sliceW_cm();
-  auto rot_mat_cm = particles.sliceRot_mat_cm();
-  auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
-  auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
-  auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
-  auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
-  auto force_cm = particles.sliceForce_cm();
-  auto torque_cm = particles.sliceTorque_cm();
-  auto ang_mom_cm = particles.sliceAng_mom_cm();
-
-  for ( std::size_t i = 0; i < m_cm.size(); ++i )
-    {
-      std::cout << "body " << i << " has following properties: "
-                << std::endl
-                <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1) << ", " << x_cm(i, 2)
-                << std::endl
-                << "A total mass of " << m_cm(i)
-                << std::endl;
-
-      std::cout << "Rotation matrix of " << i << " is:"
-                << std::endl;
-      for ( std::size_t j = 0; j < 9; ++j )
-        {
-          std::cout <<  rot_mat_cm(i, j) << ", " ;
-        }
-      std::cout << std::endl;
-      std::cout << "===========================" << std::endl;
-      std::cout << "===========================" << std::endl;
-      std::cout << "===========================" << std::endl;
-
-      // std::cout << "Moment of inertia matrix of " << i << " is:"
-      //           << std::endl;
-      // for ( std::size_t j = 0; j < 9; ++j )
-      //   {
-      //     std::cout <<  moi_body_mat_cm(i, j) << ", " ;
-      //   }
-      // std::cout << std::endl;
-    }
-}
-
-
-
 /*
 
  */
@@ -215,14 +126,14 @@ void Problem01FreelyTranslatingRigidBody2D( double body_length_, double body_hei
                                                                  body_height,
                                                                  body_spacing);
   particles.setup_rigid_body_properties();
-  print_rigid_body_properties(particles);
+  CabanaRigidBody::print_rigid_body_properties(particles);
   double lin_vel[3] = {0.0, 0.0, 0.0};
   double ang_vel[3] = {0.0, 0.0, 2. * M_PI};
   // double ang_vel[3] = {0.0, 0.0, 1.};
   particles.set_cm_linear_velocity(lin_vel);
   particles.set_cm_angular_velocity(ang_vel);
-  // print_particle_properties(particles);
-  print_rigid_body_properties(particles);
+  // CabanaRigidBody::print_particle_properties(particles);
+  CabanaRigidBody::print_rigid_body_properties(particles);
 
   // =================================================================
   // //                   3. create the neighbours
@@ -250,7 +161,7 @@ void Problem01FreelyTranslatingRigidBody2D( double body_length_, double body_hei
   auto dt = 1e-4;
   auto final_time = 1.;
   // auto final_time = 2. * M_PI;
-  // auto final_time = 5. * dt;
+  // auto final_time = 100. * dt;
   auto time = 0.;
   int num_steps = final_time / dt;
   int output_frequency = 100;
@@ -279,8 +190,9 @@ void Problem01FreelyTranslatingRigidBody2D( double body_length_, double body_hei
           // particles.output_rb_properties( step / output_frequency, time );
         }
       time += dt;
+      // CabanaRigidBody::print_rigid_body_properties(particles);
     }
-  print_rigid_body_properties(particles);
+  CabanaRigidBody::print_rigid_body_properties(particles);
 }
 
 
