@@ -1,9 +1,13 @@
 add_executable(Problem01FreelyTranslatingRigidBody2D problem_01_freely_translating_rigid_body_2d.cpp)
 target_link_libraries(Problem01FreelyTranslatingRigidBody2D PRIVATE cabanarigidbody)
 
+add_executable(Problem02FreelyTranslatingRigidBody3D problem_02_freely_translating_rigid_body_3d.cpp)
+target_link_libraries(Problem02FreelyTranslatingRigidBody3D PRIVATE cabanarigidbody)
+
 
 install(TARGETS
   Problem01FreelyTranslatingRigidBody2D
+  Problem02FreelyTranslatingRigidBody3D
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_definitions(-w)

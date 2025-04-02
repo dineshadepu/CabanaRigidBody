@@ -74,6 +74,27 @@ namespace CabanaRigidBody
     }
     // todo: move the left and right to their respective positions
 
+
+    /// Lenght is in x direction
+    /// height is in y direction
+    /// depth is in z direction
+    std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> create_3d_block(double length, double height, double depth, double spacing) {
+      std::vector<double> x_points;
+      std::vector<double> y_points;
+      std::vector<double> z_points;
+
+      for (double x = 0; x <= length; x += spacing) {
+        for (double y = 0; y <= height; y += spacing) {
+          for (double z = 0; z <= depth; z += spacing) {
+            x_points.push_back(x);
+            y_points.push_back(y);
+            z_points.push_back(z);
+          }
+        }
+      }
+
+      return {x_points, y_points, z_points};
+    }
   }
 }
 
