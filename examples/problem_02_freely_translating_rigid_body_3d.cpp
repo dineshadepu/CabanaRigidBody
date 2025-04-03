@@ -101,7 +101,11 @@ auto create_particles(double body_length, double body_height, double body_depth,
 /*
 
  */
-void Problem02FreelyTranslatingRigidBody3D( double body_length_, double body_height_, double body_depth_, double body_spacing_)
+void Problem02FreelyTranslatingRigidBody3D(double body_length_,
+                                           double body_height_,
+                                           double body_depth_,
+                                           double body_spacing_,
+                                           double use_quaternion_)
 {
   int comm_rank = -1;
   MPI_Comm_rank( MPI_COMM_WORLD, &comm_rank );
@@ -126,6 +130,7 @@ void Problem02FreelyTranslatingRigidBody3D( double body_length_, double body_hei
   double body_spacing = body_spacing_;
   double hdx = 1.;
   double h = hdx * body_spacing;
+  double use_quaternion = use_quaternion_;
   // =================================================================
   //                   2. create the particles
   // =================================================================
@@ -135,10 +140,10 @@ void Problem02FreelyTranslatingRigidBody3D( double body_length_, double body_hei
                                                                  body_spacing);
   particles.setup_rigid_body_properties();
   CabanaRigidBody::print_rigid_body_properties(particles);
-  double lin_vel[3] = {1.0, 0.0, 0.0};
-  // double ang_vel[3] = {0.0, 0.0, 2. * M_PI};
+  double lin_vel[3] = {0.0, 0.0, 0.0};
+  double ang_vel[3] = {0.0, 0.0, 2. * M_PI};
   // double ang_vel[3] = {0.0, 2. * M_PI, 0.0};
-  double ang_vel[3] = {2. * M_PI, 0.0, 0.0};
+  // double ang_vel[3] = {2. * M_PI, 0.0, 0.0};
   // double ang_vel[3] = {0.0, 0.0, 1.};
   particles.set_cm_linear_velocity(lin_vel);
   particles.set_cm_angular_velocity(ang_vel);
@@ -182,7 +187,13 @@ void Problem02FreelyTranslatingRigidBody3D( double body_length_, double body_hei
   // Main timestep loop.
   for ( int step = 0; step <= num_steps; step++ )
     {
-      integrator.euler_stage1( particles );
+      if (use_quaternion == 1.) {
+        integrator.euler_stage1_quaternion( particles );
+      }
+      else {
+        integrator.euler_stage1( particles );
+      }
+      // integrator.euler_stage1_quaternion_body_frame_eqs( particles );
 
       // integrator->stage2( *particles );
 
@@ -194,13 +205,14 @@ void Problem02FreelyTranslatingRigidBody3D( double body_length_, double body_hei
       // ====================================================
       if ( step % output_frequency == 0 )
         {
-          std::cout << "We are at " << step << " " << "/ " << num_steps << " ";
+          // std::cout << "We are at " << step << " " << "/ " << num_steps << " ";
           // std::cout << std::endl;
           particles.output( step / output_frequency, time );
-          // particles.output_rb_properties( step / output_frequency, time );
+          particles.output_rb_properties( step / output_frequency, time );
         }
       time += dt;
       // CabanaRigidBody::print_rigid_body_properties(particles);
+      CabanaRigidBody::printProgressBar(float(step) / num_steps);
     }
   CabanaRigidBody::print_rigid_body_properties(particles);
 }
@@ -215,8 +227,8 @@ int main( int argc, char* argv[] )
   // check inputs and write usage
   if ( argc < 4 )
     {
-      std::cerr << "Usage: ./Problem01FreelyTranslatingRigidBody2D body-length "
-        "body-height  body-spacing \n";
+      std::cerr << "Usage: ./Problem02FreelyTranslatingRigidBody3D body-length "
+        "body-height body-depth  body-spacing use-quaternion \n";
       std::cerr << "\nwhere body-length       length of the body block"
         "\n";
       std::cerr
@@ -225,7 +237,9 @@ int main( int argc, char* argv[] )
         << "      body-depth       depth of the body block\n";
       std::cerr
         << "      body-spacing       spacing of the body particles\n";
-      std::cerr << "\nfor example: ./Problem02FreelyTranslatingRigidBody3D 1. 1. 1. 0.1\n";
+      std::cerr
+        << "      use-quaternion       Use quaternions for rotation\n";
+      std::cerr << "\nfor example: ./Problem02FreelyTranslatingRigidBody3D 1. 1. 1. 0.1 1.\n";
       Kokkos::finalize();
       MPI_Finalize();
       return 0;
@@ -236,12 +250,14 @@ int main( int argc, char* argv[] )
   double body_height = std::atof( argv[2] );
   double body_depth = std::atof( argv[3] );
   double body_spacing = std::atof( argv[4] );
+  double use_quaternion = std::atof( argv[5] );
   // run the problem
   Problem02FreelyTranslatingRigidBody3D(
                       body_length,
                       body_height,
                       body_depth,
-                      body_spacing);
+                      body_spacing,
+                      use_quaternion);
 
   Kokkos::finalize();
   MPI_Finalize();

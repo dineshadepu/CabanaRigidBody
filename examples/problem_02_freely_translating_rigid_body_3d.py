@@ -66,27 +66,30 @@ os.system('cd ' + output_dir + '&& ./Problem02FreelyTranslatingRigidBody3D ' + c
 # # plt.axes().set_aspect('equal', 'box')
 # plt.show()
 
-# from utils import get_files
-# files = get_files(output_dir)
+from utils import get_files, get_files_rigid_bodies
+files = get_files_rigid_bodies(output_dir)
 # print(files)
 
-# # TODO add one more condition to skip this plot and go to direct comparision plots
-# if len(files) > 0:
-#     # print(directory_name+files[0])
-#     fn_simu = []
-#     time_simu = []
-#     for f in files:
-#         f = h5py.File(input_path(name, f), "r")
-#         fn_simu.append(f["forces"][1][0] / 1e3)
-#         time_simu.append(f.attrs["Time"] / 1e-6)
+# TODO add one more condition to skip this plot and go to direct comparision plots
+if len(files) > 0:
+    # print(directory_name+files[0])
+    R_0_simu = []
+    time_simu = []
+    for f_name in files:
+        f_path = os.path.join(output_dir, f_name)
+        f = h5py.File(f_path, "r")
+        # print(f["rot_mat_cm"][:])
+        R_0_simu.append(f["rot_mat_cm"][0][0])
+        time_simu.append(f.attrs["Time"])
+else:
+    sys.exit("Files are empty")
 
-#     # save the simulated data in a npz file in the case folder
-#     res_npz = os.path.join(self.input_path(name, "results.npz"))
-#     np.savez(res_npz,
-#                 time_simu=time_simu,
-#                 fn_simu=fn_simu)
+# save the simulated data in a npz file in the case folder
+res_npz = os.path.join(os.path.join(output_dir, "results.npz"))
+np.savez(res_npz,
+         time_simu=time_simu,
+         R_0_simu=R_0_simu)
 
-#     plt.scatter(time_analy, fn_analy, label="Analytical")
-#     plt.plot(time_simu, fn_simu, "^-", label="Cabana DEM solver")
-#     plt.legend()
-#     plt.savefig(self.input_path(name, "fn_vs_time.pdf"))
+plt.plot(time_simu, R_0_simu, label="Rotation matrix index 0")
+plt.legend()
+plt.savefig(os.path.join(output_dir, "time_vs_rot_mat_00.pdf"))

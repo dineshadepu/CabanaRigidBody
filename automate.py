@@ -171,9 +171,99 @@ class Problem01FreelyTranslatingRigidBody2D(Problem):
         self.move_figures()
 
 
+class Problem02FreelyTranslatingRigidBody3D(Problem):
+    """
+    Function approximation
+    """
+    def get_name(self):
+        return 'problem_02_freely_translating_rigid_body_3d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python examples/problem_02_freely_translating_rigid_body_3d.py $output_dir '
+
+        body_length=1.
+        body_height=1.
+        body_depth=1.
+        body_spacing=0.1
+        # Base case info
+        self.case_info = {
+            'with_rotation_matrix': (dict(
+                body_length=body_length,
+                body_height=body_height,
+                body_depth=body_depth,
+                body_spacing=body_spacing,
+                use_quaternion=0.
+                ), 'Rotation Matrix'),
+            'with_quaternion': (dict(
+                body_length=body_length,
+                body_height=body_height,
+                body_depth=body_depth,
+                body_spacing=body_spacing,
+                use_quaternion=1.
+                ), 'Quaternion'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def plot_comparision_of_rotation_matrix(self, fname):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        for name in self.case_info:
+            R_0_simu = data[name]['R_0_simu']
+            time_simu = data[name]['time_simu']
+            # plt.plot(time_simu, R_0_simu, label=self.cases[1])
+            plt.plot(time_simu, R_0_simu, label=self.case_info[name][1])
+
+        # sort the fem data before plotting
+
+        plt.xlabel('Time')
+        plt.ylabel('Rotation matrix index 0')
+        plt.legend()
+        plt.savefig(self.output_path(fname))
+        plt.clf()
+        plt.close()
+
+    def move_figures(self):
+        import shutil
+        import os
+
+        for name in self.case_info:
+            source, tail = os.path.split(self.input_path(name))
+
+            directories = os.listdir(source)
+
+            for directory in directories:
+                try:
+                    file_names = os.listdir(os.path.join(source, directory))
+                    for file_name in file_names:
+                        if file_name.endswith((".jpg", ".pdf", ".png")):
+                            target_dir = "manuscript/figures/" + source[8:] + "/" + directory
+                            try:
+                                os.makedirs(target_dir)
+                            except FileExistsError:
+                                pass
+                            shutil.copy(os.path.join(source, directory, file_name), target_dir)
+                except NotADirectoryError:
+                    pass
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_comparision_of_rotation_matrix(fname='time_vs_rot_mat_00.pdf')
+        self.move_figures()
+
+
 if __name__ == '__main__':
     PROBLEMS = [
-       Problem01FreelyTranslatingRigidBody2D
+        Problem01FreelyTranslatingRigidBody2D,
+        Problem02FreelyTranslatingRigidBody3D
     ]
 
     automator = Automator(

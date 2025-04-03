@@ -31,6 +31,7 @@ namespace CabanaRigidBody
     using vec_int_type = Cabana::MemberTypes<int[3]>;
     using matrix_double_type = Cabana::MemberTypes<double[9]>;
     using vec_2_double_type = Cabana::MemberTypes<double[2]>;
+    using quat_double_type = Cabana::MemberTypes<double[4]>;
 
     // FIXME: add vector length.
     // FIXME: enable variable aosoa.
@@ -40,6 +41,7 @@ namespace CabanaRigidBody
     using aosoa_vec_int_type = Cabana::AoSoA<vec_int_type, memory_space, 1>;
     using aosoa_mat_double_type = Cabana::AoSoA<matrix_double_type, memory_space, 1>;
     using aosoa_vec_2_double_type = Cabana::AoSoA<vec_2_double_type, memory_space, 1>;
+    using aosoa_quat_double_type = Cabana::AoSoA<quat_double_type, memory_space, 1>;
 
 
     std::array<double, dim> mesh_lo;
@@ -278,6 +280,34 @@ namespace CabanaRigidBody
       return Cabana::slice<0>( _ang_mom_cm, "ang_mom_cm" );
     }
 
+    auto sliceMoi_body_principal_cm() {
+      return Cabana::slice<0>( _moi_body_principal_cm, "moi_body_principal_cm" );
+    }
+    auto sliceMoi_body_principal_cm() const {
+      return Cabana::slice<0>( _moi_body_principal_cm, "moi_body_principal_cm" );
+    }
+
+    auto sliceW_body_cm() {
+      return Cabana::slice<0>( _w_body_cm, "w_body_cm" );
+    }
+    auto sliceW_body_cm() const {
+      return Cabana::slice<0>( _w_body_cm, "w_body_cm" );
+    }
+
+    auto sliceW_body_dot_cm() {
+      return Cabana::slice<0>( _w_body_dot_cm, "w_body_dot_cm" );
+    }
+    auto sliceW_body_dot_cm() const {
+      return Cabana::slice<0>( _w_body_dot_cm, "w_body_dot_cm" );
+    }
+
+    auto sliceQuat_cm() {
+      return Cabana::slice<0>( _quat_cm, "quat_cm" );
+    }
+    auto sliceQuat_cm() const {
+      return Cabana::slice<0>( _quat_cm, "quat_cm" );
+    }
+
     void resize(const std::size_t n, const std::size_t p)
     {
       _no_of_particles = n;
@@ -308,6 +338,10 @@ namespace CabanaRigidBody
       _force_cm.resize( p );
       _torque_cm.resize( p );
       _ang_mom_cm.resize( p );
+      _moi_body_principal_cm.resize( p );
+      _w_body_cm.resize( p );
+      _w_body_dot_cm.resize( p );
+      _quat_cm.resize( p );
     }
 
     /// Todo: Change this function to GPU
@@ -431,6 +465,10 @@ namespace CabanaRigidBody
       auto force_cm = sliceForce_cm();
       auto torque_cm = sliceTorque_cm();
       auto ang_mom_cm = sliceAng_mom_cm();
+      auto moi_body_principal_cm = sliceMoi_body_principal_cm();
+      auto w_body_cm = sliceW_body_cm();
+      auto w_body_dot_cm = sliceW_body_dot_cm();
+      auto quat_cm = sliceQuat_cm();
 
       auto moment_of_inertia_func = KOKKOS_LAMBDA( const int i )
         {
@@ -487,6 +525,11 @@ namespace CabanaRigidBody
                 rot_mat_cm ( i, k ) = 1.;
               }
             }
+          // Set the rotation matrix i.e., orientation of the body frame axis
+          quat_cm ( i, 0 ) = 1.;
+          quat_cm ( i, 1 ) = 0.;
+          quat_cm ( i, 2 ) = 0.;
+          quat_cm ( i, 3 ) = 0.;
         };
       Kokkos::RangePolicy<execution_space> policy_tm( 0, m_cm.size());
       Kokkos::parallel_for( "CabanaRB:RBSetup:TotalMass", policy_tm,
@@ -585,9 +628,9 @@ namespace CabanaRigidBody
               auto dv = w_cm ( i,  2 ) * dx - w_cm ( i,  0 ) * dz;
               auto dw = w_cm ( i,  0 ) * dy - w_cm ( i,  1 ) * dx;
 
-              u_p ( j, 0 ) = u_cm ( i,  1 ) + du;
-              u_p ( j, 1 ) = u_cm ( i,  2 ) + dv;
-              u_p ( j, 2 ) = u_cm ( i,  0 ) + dw;
+              u_p ( j, 0 ) = u_cm ( i,  0 ) + du;
+              u_p ( j, 1 ) = u_cm ( i,  1 ) + dv;
+              u_p ( j, 2 ) = u_cm ( i,  2 ) + dw;
             }
         };
       Kokkos::RangePolicy<execution_space> policy_tm( 0, m_cm.size());
@@ -753,6 +796,10 @@ namespace CabanaRigidBody
                                                               sliceForce_cm(),
                                                               sliceTorque_cm(),
                                                               sliceAng_mom_cm(),
+                                                              sliceMoi_body_principal_cm(),
+                                                              sliceW_body_cm(),
+                                                              sliceW_body_dot_cm(),
+                                                              sliceQuat_cm(),
                                                               sliceRot_mat_cm(),
                                                               sliceMoi_body_mat_cm(),
                                                               sliceMoi_global_mat_cm(),
@@ -811,6 +858,10 @@ namespace CabanaRigidBody
     aosoa_vec_double_type _force_cm; // orientation in the form of a rotation matrix
     aosoa_vec_double_type _torque_cm; // orientation in the form of a rotation matrix
     aosoa_vec_double_type _ang_mom_cm; // orientation in the form of a rotation matrix
+    aosoa_vec_double_type _moi_body_principal_cm;
+    aosoa_vec_double_type _w_body_cm;
+    aosoa_vec_double_type _w_body_dot_cm;
+    aosoa_quat_double_type _quat_cm;
 
     // auto x_p = particles.slicePosition();
     // auto u_p = particles.sliceVelocity();

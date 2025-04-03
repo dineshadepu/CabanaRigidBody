@@ -276,6 +276,354 @@ namespace CabanaRigidBody
                             rb_particles_euler_stage_1_lambda_func );
     }
 
+    template <class ParticlesType>
+    void euler_stage1_quaternion(ParticlesType& particles){
+      auto x_p = particles.slicePosition();
+      auto u_p = particles.sliceVelocity();
+      auto au_p = particles.sliceAcceleration();
+      auto force_p = particles.sliceForce();
+      auto m_p = particles.sliceMass();
+      auto rho_p = particles.sliceDensity();
+      auto p_p = particles.slicePressure();
+      auto h_p = particles.sliceH();
+      auto wij_p = particles.sliceWij();
+      auto arho_p = particles.sliceArho();
+      auto x_body_p = particles.sliceX_body();
+      auto body_id_p = particles.sliceBody_id();
+
+      auto rb_limits = particles.sliceRb_limits();
+      auto m_cm = particles.sliceM_cm();
+      auto x_cm = particles.sliceX_cm();
+      auto u_cm = particles.sliceU_cm();
+      auto w_cm = particles.sliceW_cm();
+      auto rot_mat_cm = particles.sliceRot_mat_cm();
+      auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
+      auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
+      auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
+      auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
+      auto force_cm = particles.sliceForce_cm();
+      auto torque_cm = particles.sliceTorque_cm();
+      auto ang_mom_cm = particles.sliceAng_mom_cm();
+      auto moi_body_principal_cm = particles.sliceMoi_body_principal_cm();
+      auto w_body_cm = particles.sliceW_body_cm();
+      auto w_body_dot_cm = particles.sliceW_body_dot_cm();
+      auto quat_cm = particles.sliceQuat_cm();
+
+      auto dt = _dt;
+      // Update the rigid body properties
+      auto rb_euler_stage_1_lambda_func = KOKKOS_LAMBDA( const int i )
+        {
+          auto m_i = m_cm( i );
+          auto m_i_1 = 1. / m_i;
+
+          // Translation motion variables update
+          x_cm( i, 0 ) += u_cm( i, 0 ) * dt;
+          x_cm( i, 1 ) += u_cm( i, 1 ) * dt;
+          x_cm( i, 2 ) += u_cm( i, 2 ) * dt;
+
+          u_cm( i, 0 ) += force_cm( i, 0 ) * m_i_1 * dt;
+          u_cm( i, 1 ) += force_cm( i, 1 ) * m_i_1 * dt;
+          u_cm( i, 2 ) += force_cm( i, 2 ) * m_i_1 * dt;
+
+          // Update the angular momentum
+          for ( std::size_t j = 0; j < 3; ++j )
+            {
+              ang_mom_cm( i, j ) += torque_cm( i, j ) * dt;
+            }
+
+          double R[9] = {0};
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              R[j] = rot_mat_cm( i, j );
+            }
+          // Translate the angular velocity to body frame
+          w_body_cm( i, 0 ) = R[0] * w_cm( i, 0 ) + R[3] * w_cm( i, 1 ) + R[6] * w_cm( i, 2 );
+          w_body_cm( i, 1 ) = R[1] * w_cm( i, 0 ) + R[4] * w_cm( i, 1 ) + R[7] * w_cm( i, 2 );
+          w_body_cm( i, 2 ) = R[2] * w_cm( i, 0 ) + R[5] * w_cm( i, 1 ) + R[8] * w_cm( i, 2 );
+          // w_body_cm( i, 0 ) = w_cm( i, 0 );
+          // w_body_cm( i, 1 ) = w_cm( i, 1 );
+          // w_body_cm( i, 2 ) = w_cm( i, 2 );
+
+          // Compute the rate of change of orientation (quaternion change)
+          double q[4] = {quat_cm( i, 0 ), quat_cm( i, 1 ),  quat_cm( i, 2 ),  quat_cm( i, 3 ) };
+          double q_dot[4] = {0};
+          q_dot[0] = -0.5 * (q[1] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 2 ));
+          q_dot[1] =  0.5 * (q[0] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 2 ) - q[3] * w_body_cm( i, 1 ));
+          q_dot[2] =  0.5 * (q[0] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 0 ) - q[1] * w_body_cm( i, 2 ));
+          q_dot[3] =  0.5 * (q[0] * w_body_cm( i, 2 ) + q[1] * w_body_cm( i, 1 ) - q[2] * w_body_cm( i, 0 ));
+
+          // Update the quaternion to next time
+          quat_cm( i, 0 ) = q[0] + q_dot[0] * dt;
+          quat_cm( i, 1 ) = q[1] + q_dot[1] * dt;
+          quat_cm( i, 2 ) = q[2] + q_dot[2] * dt;
+          quat_cm( i, 3 ) = q[3] + q_dot[3] * dt;
+          // Update the quaternion to next time ends
+          // Normalize the quaternion to next time
+          double quat_magn = quat_cm( i, 0 ) * quat_cm( i, 0 ) + quat_cm( i, 1 ) * quat_cm( i, 1 ) + quat_cm( i, 2 ) * quat_cm( i, 2 ) + quat_cm( i, 3 ) * quat_cm( i, 3 );
+          quat_magn = sqrt(quat_magn);
+
+          quat_cm( i, 0 ) /= quat_magn;
+          quat_cm( i, 1 ) /= quat_magn;
+          quat_cm( i, 2 ) /= quat_magn;
+          quat_cm( i, 3 ) /= quat_magn;
+          // Normalize the quaternion to next time ends
+          // Update the rotation matrix from the quaternion
+          double q1[4] = {quat_cm( i, 0 ), quat_cm( i, 1 ),  quat_cm( i, 2 ),  quat_cm( i, 3 ) };
+          rot_mat_cm( i, 0 ) = q1[0]*q1[0] + q1[1]*q1[1] - q1[2] * q1[2] - q1[3] * q1[3];
+          rot_mat_cm( i, 1 ) = 2. * (q1[1]*q1[2] - q1[0]*q1[3]);
+          rot_mat_cm( i, 2 ) = 2. * (q1[1]*q1[3] - q1[0]*q1[2]);
+
+          rot_mat_cm( i, 3 ) = 2. * (q1[1]*q1[2] + q1[0]*q1[3]);
+          rot_mat_cm( i, 4 ) = q1[0]*q1[0] - q1[1]*q1[1] + q1[2] * q1[2] - q1[3] * q1[3];
+          rot_mat_cm( i, 5 ) = 2. * (q1[2]*q1[3] - q1[0]*q1[1]);
+
+          rot_mat_cm( i, 6 ) = 2. * (q1[1]*q1[3] - q1[0]*q1[2]);
+          rot_mat_cm( i, 7 ) = 2. * (q1[2]*q1[3] + q1[0]*q1[1]);
+          rot_mat_cm( i, 8 ) = q1[0]*q1[0] - q1[1]*q1[1] - q1[2] * q1[2] + q1[3] * q1[3];
+
+          // Update the rotation matrix from the quaternion ends
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              R[j] = rot_mat_cm( i, j );
+            }
+          double R_t[9] = {0};
+          R_t[0] = R[0];
+          R_t[1] = R[3];
+          R_t[2] = R[6];
+
+          R_t[3] = R[1];
+          R_t[4] = R[4];
+          R_t[2] = R[6];
+
+          R_t[6] = R[2];
+          R_t[7] = R[5];
+          R_t[8] = R[8];
+
+          // copy moi to local matrix
+          double tmp_moi_inv[9] = {0.};
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              tmp_moi_inv[j] = moi_inv_body_mat_cm( i, j );
+            }
+
+          double R_moi[9] = {0.};
+          double new_moi[9] = {0.};
+          R_moi[0] = R[0] * tmp_moi_inv[0] + R[1] * tmp_moi_inv[3] + R[2] * tmp_moi_inv[6];
+          R_moi[1] = R[0] * tmp_moi_inv[1] + R[1] * tmp_moi_inv[4] + R[2] * tmp_moi_inv[7];
+          R_moi[2] = R[0] * tmp_moi_inv[2] + R[1] * tmp_moi_inv[5] + R[2] * tmp_moi_inv[8];
+
+          R_moi[3] = R[3] * tmp_moi_inv[0] + R[4] * tmp_moi_inv[3] + R[5] * tmp_moi_inv[6];
+          R_moi[4] = R[3] * tmp_moi_inv[1] + R[4] * tmp_moi_inv[4] + R[5] * tmp_moi_inv[7];
+          R_moi[5] = R[3] * tmp_moi_inv[2] + R[4] * tmp_moi_inv[5] + R[5] * tmp_moi_inv[8];
+
+          R_moi[6] = R[6] * tmp_moi_inv[0] + R[7] * tmp_moi_inv[3] + R[8] * tmp_moi_inv[6];
+          R_moi[7] = R[6] * tmp_moi_inv[1] + R[7] * tmp_moi_inv[4] + R[8] * tmp_moi_inv[7];
+          R_moi[8] = R[6] * tmp_moi_inv[2] + R[7] * tmp_moi_inv[5] + R[8] * tmp_moi_inv[8];
+
+          new_moi[0] = R_moi[0] * R_t[0] + R_moi[1] * R_t[3] + R_moi[2] * R_t[6];
+          new_moi[1] = R_moi[0] * R_t[1] + R_moi[1] * R_t[4] + R_moi[2] * R_t[7];
+          new_moi[2] = R_moi[0] * R_t[2] + R_moi[1] * R_t[5] + R_moi[2] * R_t[8];
+
+          new_moi[3] = R_moi[3] * R_t[0] + R_moi[4] * R_t[3] + R_moi[5] * R_t[6];
+          new_moi[4] = R_moi[3] * R_t[1] + R_moi[4] * R_t[4] + R_moi[5] * R_t[7];
+          new_moi[5] = R_moi[3] * R_t[2] + R_moi[4] * R_t[5] + R_moi[5] * R_t[8];
+
+          new_moi[6] = R_moi[6] * R_t[0] + R_moi[7] * R_t[3] + R_moi[8] * R_t[6];
+          new_moi[7] = R_moi[6] * R_t[1] + R_moi[7] * R_t[4] + R_moi[8] * R_t[7];
+          new_moi[8] = R_moi[6] * R_t[2] + R_moi[7] * R_t[5] + R_moi[8] * R_t[8];
+
+          // update moi to particle array
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              moi_inv_global_mat_cm( i, j ) = new_moi[j];
+            }
+
+          // Angular velocity update
+          w_cm( i, 0 ) = new_moi[0] * ang_mom_cm( i, 0 ) + new_moi[1] * ang_mom_cm( i, 1 ) + new_moi[2] * ang_mom_cm( i, 2 );
+          w_cm( i, 1 ) = new_moi[3] * ang_mom_cm( i, 0 ) + new_moi[4] * ang_mom_cm( i, 1 ) + new_moi[5] * ang_mom_cm( i, 2 );
+          w_cm( i, 2 ) = new_moi[6] * ang_mom_cm( i, 0 ) + new_moi[7] * ang_mom_cm( i, 1 ) + new_moi[8] * ang_mom_cm( i, 2 );
+
+        };
+      Kokkos::RangePolicy<ExecutionSpace> policy( 0, rb_limits.size() );
+      Kokkos::parallel_for( "CabanaRB:Integrator:RBEulerStage1", policy,
+                            rb_euler_stage_1_lambda_func );
+
+      // Update the particle properties
+      auto rb_particles_euler_stage_1_lambda_func = KOKKOS_LAMBDA( const int i )
+        {
+          auto bid_i = body_id_p(i);
+
+          // auto x_body_p = particles.sliceX_body();
+          double dx = rot_mat_cm( bid_i, 0 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 1 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 2 ) * x_body_p( i, 2 );
+          double dy = rot_mat_cm( bid_i, 3 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 4 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 5 ) * x_body_p( i, 2 );
+          double dz = rot_mat_cm( bid_i, 6 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 7 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 8 ) * x_body_p( i, 2 );
+
+          x_p ( i, 0 ) = x_cm ( bid_i, 0 ) + dx;
+          x_p ( i, 1 ) = x_cm ( bid_i, 1 ) + dy;
+          x_p ( i, 2 ) = x_cm ( bid_i, 2 ) + dz;
+
+          auto du = w_cm ( bid_i,  1 ) * dz - w_cm ( bid_i,  2 ) * dy;
+          auto dv = w_cm ( bid_i,  2 ) * dx - w_cm ( bid_i,  0 ) * dz;
+          auto dw = w_cm ( bid_i,  0 ) * dy - w_cm ( bid_i,  1 ) * dx;
+
+          u_p ( i, 0 ) = u_cm ( bid_i,  0 ) + du;
+          u_p ( i, 1 ) = u_cm ( bid_i,  1 ) + dv;
+          u_p ( i, 2 ) = u_cm ( bid_i,  2 ) + dw;
+        };
+
+      Kokkos::RangePolicy<ExecutionSpace> policy1( 0, x_p.size() );
+      Kokkos::parallel_for( "CabanaRB:Integrator:RBParticlesEulerStage1", policy1,
+                            rb_particles_euler_stage_1_lambda_func );
+
+    }
+
+    template <class ParticlesType>
+    void euler_stage1_quaternion_body_frame_eqs(ParticlesType& particles){
+      auto x_p = particles.slicePosition();
+      auto u_p = particles.sliceVelocity();
+      auto au_p = particles.sliceAcceleration();
+      auto force_p = particles.sliceForce();
+      auto m_p = particles.sliceMass();
+      auto rho_p = particles.sliceDensity();
+      auto p_p = particles.slicePressure();
+      auto h_p = particles.sliceH();
+      auto wij_p = particles.sliceWij();
+      auto arho_p = particles.sliceArho();
+      auto x_body_p = particles.sliceX_body();
+      auto body_id_p = particles.sliceBody_id();
+
+      auto rb_limits = particles.sliceRb_limits();
+      auto m_cm = particles.sliceM_cm();
+      auto x_cm = particles.sliceX_cm();
+      auto u_cm = particles.sliceU_cm();
+      auto w_cm = particles.sliceW_cm();
+      auto rot_mat_cm = particles.sliceRot_mat_cm();
+      auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
+      auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
+      auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
+      auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
+      auto force_cm = particles.sliceForce_cm();
+      auto torque_cm = particles.sliceTorque_cm();
+      auto ang_mom_cm = particles.sliceAng_mom_cm();
+      auto moi_body_principal_cm = particles.sliceMoi_body_principal_cm();
+      auto w_body_cm = particles.sliceW_body_cm();
+      auto w_body_dot_cm = particles.sliceW_body_dot_cm();
+      auto quat_cm = particles.sliceQuat_cm();
+
+      auto dt = _dt;
+      // Update the rigid body properties
+      auto rb_euler_stage_1_lambda_func = KOKKOS_LAMBDA( const int i )
+        {
+          auto m_i = m_cm( i );
+          auto m_i_1 = 1. / m_i;
+
+          // Translation motion variables update
+          x_cm( i, 0 ) += u_cm( i, 0 ) * dt;
+          x_cm( i, 1 ) += u_cm( i, 1 ) * dt;
+          x_cm( i, 2 ) += u_cm( i, 2 ) * dt;
+
+          u_cm( i, 0 ) += force_cm( i, 0 ) * m_i_1 * dt;
+          u_cm( i, 1 ) += force_cm( i, 1 ) * m_i_1 * dt;
+          u_cm( i, 2 ) += force_cm( i, 2 ) * m_i_1 * dt;
+
+          // =============================
+          // Update the Angular velocity
+          // =============================
+          // First translate torque to the body frame
+          double torque_body_cm[3] = {0.};
+          torque_body_cm[0] = rot_mat_cm( i, 0 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 3 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 6 ) * torque_cm( i, 2 );
+          torque_body_cm[1] = rot_mat_cm( i, 1 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 4 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 7 ) * torque_cm( i, 2 );
+          torque_body_cm[2] = rot_mat_cm( i, 2 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 5 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 8 ) * torque_cm( i, 2 );
+
+          double I_x = moi_body_principal_cm( i, 0 );
+          double I_y = moi_body_principal_cm( i, 1 );
+          double I_z = moi_body_principal_cm( i, 2 );
+
+          w_body_dot_cm( i, 0 ) = (torque_body_cm[0] - (I_z - I_x) * w_body_cm ( i, 1 ) * w_body_cm ( i, 2 )) / I_x;
+          w_body_dot_cm( i, 1 ) = (torque_body_cm[1] - (I_x - I_z) * w_body_cm ( i, 2 ) * w_body_cm ( i, 0 )) / I_y;
+          w_body_dot_cm( i, 2 ) = (torque_body_cm[2] - (I_y - I_x) * w_body_cm ( i, 0 ) * w_body_cm ( i, 1 )) / I_z;
+
+          w_body_cm( i, 0 ) += w_body_dot_cm ( i, 1 ) * dt;
+          w_body_cm( i, 1 ) += w_body_dot_cm ( i, 2 ) * dt;
+          w_body_cm( i, 2 ) += w_body_dot_cm ( i, 0 ) * dt;
+          // TODO: Should I rotate it now or after orientation update???
+          // ====================================
+          // Update the Angular velocity ends
+          // ====================================
+
+          // Compute the rate of change of orientation (quaternion change)
+          double q[4] = {quat_cm( i, 0 ), quat_cm( i, 1 ),  quat_cm( i, 2 ),  quat_cm( i, 3 ) };
+          double q_dot[4] = {0};
+          q_dot[0] = - q[1] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 2 );
+          q_dot[1] = + q[0] * w_body_cm( i, 0 ) - q[3] * w_body_cm( i, 1 ) + q[2] * w_body_cm( i, 2 );
+          q_dot[2] = + q[3] * w_body_cm( i, 0 ) + q[0] * w_body_cm( i, 1 ) - q[1] * w_body_cm( i, 2 );
+          q_dot[3] = - q[2] * w_body_cm( i, 0 ) + q[1] * w_body_cm( i, 1 ) + q[0] * w_body_cm( i, 2 );
+          for ( std::size_t j = 0; j < 4; ++j )
+            {
+              q_dot[j] *= 0.5;
+            }
+          // Update the quaternion to next time
+          quat_cm( i, 0 ) = q[0] + q_dot[0] * dt;
+          quat_cm( i, 1 ) = q[1] + q_dot[1] * dt;
+          quat_cm( i, 2 ) = q[2] + q_dot[2] * dt;
+          quat_cm( i, 3 ) = q[3] + q_dot[3] * dt;
+          // Update the quaternion to next time ends
+          // Normalize the quaternion to next time
+          double quat_magn = quat_cm( i, 0 ) * quat_cm( i, 0 ) + quat_cm( i, 1 ) * quat_cm( i, 1 ) + quat_cm( i, 2 ) * quat_cm( i, 2 ) + quat_cm( i, 3 ) * quat_cm( i, 3 );
+          quat_magn = sqrt(quat_magn);
+
+          quat_cm( i, 0 ) /= quat_magn;
+          quat_cm( i, 1 ) /= quat_magn;
+          quat_cm( i, 2 ) /= quat_magn;
+          quat_cm( i, 3 ) /= quat_magn;
+          // Normalize the quaternion to next time ends
+          // Update the rotation matrix from the quaternion
+          double q1[4] = {quat_cm( i, 0 ), quat_cm( i, 1 ),  quat_cm( i, 2 ),  quat_cm( i, 3 ) };
+          rot_mat_cm( i, 0 ) = q1[0]*q1[0] + q1[1]*q1[1] - q1[2] * q1[2] - q1[3] * q1[3];
+          rot_mat_cm( i, 1 ) = 2. * (q1[1]*q1[2] - q1[0]*q1[3]);
+          rot_mat_cm( i, 2 ) = 2. * (q1[1]*q1[3] - q1[0]*q1[2]);
+
+          rot_mat_cm( i, 3 ) = 2. * (q1[1]*q1[2] + q1[0]*q1[3]);
+          rot_mat_cm( i, 4 ) = q1[0]*q1[0] - q1[1]*q1[1] + q1[2] * q1[2] - q1[3] * q1[3];
+          rot_mat_cm( i, 5 ) = 2. * (q1[2]*q1[3] - q1[0]*q1[1]);
+
+          rot_mat_cm( i, 6 ) = 2. * (q1[1]*q1[3] - q1[0]*q1[2]);
+          rot_mat_cm( i, 7 ) = 2. * (q1[2]*q1[3] + q1[0]*q1[1]);
+          rot_mat_cm( i, 8 ) = q1[0]*q1[0] - q1[1]*q1[1] - q1[2] * q1[2] + q1[3] * q1[3];
+          // Update the rotation matrix from the quaternion ends
+        };
+      Kokkos::RangePolicy<ExecutionSpace> policy( 0, rb_limits.size() );
+      Kokkos::parallel_for( "CabanaRB:Integrator:RBEulerStage1", policy,
+                            rb_euler_stage_1_lambda_func );
+
+      // Update the particle properties
+      auto rb_particles_euler_stage_1_lambda_func = KOKKOS_LAMBDA( const int i )
+        {
+          auto bid_i = body_id_p(i);
+
+          // auto x_body_p = particles.sliceX_body();
+          double dx = rot_mat_cm( bid_i, 0 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 1 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 2 ) * x_body_p( i, 2 );
+          double dy = rot_mat_cm( bid_i, 3 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 4 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 5 ) * x_body_p( i, 2 );
+          double dz = rot_mat_cm( bid_i, 6 ) * x_body_p( i, 0 ) + rot_mat_cm( bid_i, 7 ) * x_body_p( i, 1 ) + rot_mat_cm( bid_i, 8 ) * x_body_p( i, 2 );
+
+          x_p ( i, 0 ) = x_cm ( bid_i, 0 ) + dx;
+          x_p ( i, 1 ) = x_cm ( bid_i, 1 ) + dy;
+          x_p ( i, 2 ) = x_cm ( bid_i, 2 ) + dz;
+
+          auto du = w_cm ( bid_i,  1 ) * dz - w_cm ( bid_i,  2 ) * dy;
+          auto dv = w_cm ( bid_i,  2 ) * dx - w_cm ( bid_i,  0 ) * dz;
+          auto dw = w_cm ( bid_i,  0 ) * dy - w_cm ( bid_i,  1 ) * dx;
+
+          u_p ( i, 0 ) = u_cm ( bid_i,  1 ) + du;
+          u_p ( i, 1 ) = u_cm ( bid_i,  2 ) + dv;
+          u_p ( i, 2 ) = u_cm ( bid_i,  0 ) + dw;
+        };
+
+      Kokkos::RangePolicy<ExecutionSpace> policy1( 0, x_p.size() );
+      Kokkos::parallel_for( "CabanaRB:Integrator:RBParticlesEulerStage1", policy1,
+                            rb_particles_euler_stage_1_lambda_func );
+    }
+
     // template <class ParticlesType>
     // void stage1(ParticlesType& p){
     //   auto x_p = particles.slicePosition();
@@ -408,6 +756,20 @@ namespace CabanaRigidBody
     // }
 
   };
+
+
+void printProgressBar(float progress, int barWidth = 50) {
+    std::cout << "[";
+    int pos = barWidth * progress;
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
+}
+
 }
 
 #endif // CabanaRigidBody_TIMEINTEGRATOR_HPP
