@@ -529,11 +529,16 @@ namespace CabanaRigidBody
           // =============================
           // Update the Angular velocity
           // =============================
+          double R[9] = {0.};
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              R[j] = rot_mat_cm( i, j );
+            }
           // First translate torque to the body frame
           double torque_body_cm[3] = {0.};
-          torque_body_cm[0] = rot_mat_cm( i, 0 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 3 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 6 ) * torque_cm( i, 2 );
-          torque_body_cm[1] = rot_mat_cm( i, 1 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 4 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 7 ) * torque_cm( i, 2 );
-          torque_body_cm[2] = rot_mat_cm( i, 2 ) * torque_cm( i, 0 ) + rot_mat_cm( i, 5 ) * torque_cm( i, 1 ) + rot_mat_cm( i, 8 ) * torque_cm( i, 2 );
+          torque_body_cm[0] = R[0] * torque_cm( i, 0 ) + R[3] * torque_cm( i, 1 ) + R[6] * torque_cm( i, 2 );
+          torque_body_cm[1] = R[1] * torque_cm( i, 0 ) + R[4] * torque_cm( i, 1 ) + R[7] * torque_cm( i, 2 );
+          torque_body_cm[2] = R[2] * torque_cm( i, 0 ) + R[5] * torque_cm( i, 1 ) + R[8] * torque_cm( i, 2 );
 
           double I_x = moi_body_principal_cm( i, 0 );
           double I_y = moi_body_principal_cm( i, 1 );
@@ -546,7 +551,12 @@ namespace CabanaRigidBody
           w_body_cm( i, 0 ) += w_body_dot_cm ( i, 1 ) * dt;
           w_body_cm( i, 1 ) += w_body_dot_cm ( i, 2 ) * dt;
           w_body_cm( i, 2 ) += w_body_dot_cm ( i, 0 ) * dt;
-          // TODO: Should I rotate it now or after orientation update???
+
+          // Rotate angular velocity to gloabl frame
+          w_cm( i, 0 ) = R[0] * w_body_cm( i, 0 ) + R[1] * w_body_cm( i, 1 ) + R[2] * w_body_cm( i, 2 );
+          w_cm( i, 1 ) = R[3] * w_body_cm( i, 0 ) + R[4] * w_body_cm( i, 1 ) + R[5] * w_body_cm( i, 2 );
+          w_cm( i, 2 ) = R[6] * w_body_cm( i, 0 ) + R[7] * w_body_cm( i, 1 ) + R[8] * w_body_cm( i, 2 );
+
           // ====================================
           // Update the Angular velocity ends
           // ====================================
@@ -554,14 +564,11 @@ namespace CabanaRigidBody
           // Compute the rate of change of orientation (quaternion change)
           double q[4] = {quat_cm( i, 0 ), quat_cm( i, 1 ),  quat_cm( i, 2 ),  quat_cm( i, 3 ) };
           double q_dot[4] = {0};
-          q_dot[0] = - q[1] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 2 );
-          q_dot[1] = + q[0] * w_body_cm( i, 0 ) - q[3] * w_body_cm( i, 1 ) + q[2] * w_body_cm( i, 2 );
-          q_dot[2] = + q[3] * w_body_cm( i, 0 ) + q[0] * w_body_cm( i, 1 ) - q[1] * w_body_cm( i, 2 );
-          q_dot[3] = - q[2] * w_body_cm( i, 0 ) + q[1] * w_body_cm( i, 1 ) + q[0] * w_body_cm( i, 2 );
-          for ( std::size_t j = 0; j < 4; ++j )
-            {
-              q_dot[j] *= 0.5;
-            }
+          q_dot[0] = -0.5 * (q[1] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 2 ));
+          q_dot[1] =  0.5 * (q[0] * w_body_cm( i, 0 ) + q[2] * w_body_cm( i, 2 ) - q[3] * w_body_cm( i, 1 ));
+          q_dot[2] =  0.5 * (q[0] * w_body_cm( i, 1 ) + q[3] * w_body_cm( i, 0 ) - q[1] * w_body_cm( i, 2 ));
+          q_dot[3] =  0.5 * (q[0] * w_body_cm( i, 2 ) + q[1] * w_body_cm( i, 1 ) - q[2] * w_body_cm( i, 0 ));
+
           // Update the quaternion to next time
           quat_cm( i, 0 ) = q[0] + q_dot[0] * dt;
           quat_cm( i, 1 ) = q[1] + q_dot[1] * dt;
@@ -590,7 +597,6 @@ namespace CabanaRigidBody
           rot_mat_cm( i, 6 ) = 2. * (q1[1]*q1[3] - q1[0]*q1[2]);
           rot_mat_cm( i, 7 ) = 2. * (q1[2]*q1[3] + q1[0]*q1[1]);
           rot_mat_cm( i, 8 ) = q1[0]*q1[0] - q1[1]*q1[1] - q1[2] * q1[2] + q1[3] * q1[3];
-          // Update the rotation matrix from the quaternion ends
         };
       Kokkos::RangePolicy<ExecutionSpace> policy( 0, rb_limits.size() );
       Kokkos::parallel_for( "CabanaRB:Integrator:RBEulerStage1", policy,

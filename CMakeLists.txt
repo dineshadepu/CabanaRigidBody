@@ -19,6 +19,7 @@ if(NOT NLOHMANN_JSON_FOUND)
   FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
   FetchContent_MakeAvailable(json)
 endif()
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 # find Clang Format
 find_package( CLANG_FORMAT 14 )

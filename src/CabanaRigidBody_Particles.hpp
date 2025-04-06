@@ -11,7 +11,12 @@
 #include <Cabana_Core.hpp>
 #include <Cabana_Grid.hpp>
 
+#include <Eigen/Dense>
+
 #include "CabanaRigidBody_Math.hpp"
+
+typedef Kokkos::View<double*>   ViewVectorType;
+typedef Kokkos::View<double**>  ViewMatrixType;
 
 namespace fs = std::filesystem;
 
@@ -585,6 +590,157 @@ namespace CabanaRigidBody
       set_body_frame_position_vectors();
     }
 
+    void compute_eigen_values_and_eigen_vectors(auto no_elements, auto moi, auto moi_principal, auto rot_mat){
+      Eigen::Matrix3d I;
+      for ( std::size_t i = 0; i < no_elements; ++i )
+        {
+          // create a moi matrix of particle i so that we can call eigen
+          // function to computer the eigen values and
+          I << moi( i, 0 ), moi( i, 1 ), moi( i, 2 ),
+            moi( i, 3 ), moi( i, 4 ), moi( i, 5 ),
+            moi( i, 6 ), moi( i, 7 ), moi( i, 8 );
+          for ( std::size_t j = 0; j < 3; ++j )
+            {
+              for ( std::size_t k = 0; k < 3; ++k )
+                {
+                  if (I(j, k) < 1e-12){
+                    I(j, k) = 0.;
+                  }
+                }
+            }
+          Eigen::EigenSolver<Eigen::Matrix3d> es(I);
+
+          std::cout << "MOI is : " << I << std::endl;
+          std::cout << "eigen values are: " << es.eigenvalues() << std::endl;
+          std::cout << "eigen vectors are: " << es.eigenvectors() << std::endl;
+
+          moi_principal( i, 0 ) = es.eigenvalues()[0].real();
+          moi_principal( i, 1 ) = es.eigenvalues()[1].real();
+          moi_principal( i, 2 ) = es.eigenvalues()[2].real();
+
+          rot_mat( i, 0 ) = es.eigenvectors().col(0).real()[0];
+          rot_mat( i, 3 ) = es.eigenvectors().col(0).real()[1];
+          rot_mat( i, 6 ) = es.eigenvectors().col(0).real()[2];
+
+          rot_mat( i, 1 ) = es.eigenvectors().col(1).real()[0];
+          rot_mat( i, 4 ) = es.eigenvectors().col(1).real()[1];
+          rot_mat( i, 7 ) = es.eigenvectors().col(1).real()[2];
+
+          rot_mat( i, 2 ) = es.eigenvectors().col(2).real()[0];
+          rot_mat( i, 5 ) = es.eigenvectors().col(2).real()[1];
+          rot_mat( i, 8 ) = es.eigenvectors().col(2).real()[2];
+        }
+    }
+
+    /// One should run this method only after setting up the moment of
+    /// inertia, because we compute  its eigenvalues and eigenvectors
+    void set_principal_moi_and_orientation(){
+      auto x_p = slicePosition();
+      auto u_p = sliceVelocity();
+      auto au_p = sliceAcceleration();
+      auto force_p = sliceForce();
+      auto m_p = sliceMass();
+      auto rho_p = sliceDensity();
+      auto p_p = slicePressure();
+      auto h_p = sliceH();
+      auto wij_p = sliceWij();
+      auto arho_p = sliceArho();
+      auto x_body_p = sliceX_body();
+      auto body_id_p = sliceBody_id();
+
+      auto rb_limits = sliceRb_limits();
+      auto m_cm = sliceM_cm();
+      auto x_cm = sliceX_cm();
+      auto u_cm = sliceU_cm();
+      auto w_cm = sliceW_cm();
+      auto rot_mat_cm = sliceRot_mat_cm();
+      auto moi_body_mat_cm = sliceMoi_body_mat_cm();
+      auto moi_global_mat_cm = sliceMoi_global_mat_cm();
+      auto moi_inv_body_mat_cm = sliceMoi_inv_body_mat_cm();
+      auto moi_inv_global_mat_cm = sliceMoi_inv_global_mat_cm();
+      auto force_cm = sliceForce_cm();
+      auto torque_cm = sliceTorque_cm();
+      auto ang_mom_cm = sliceAng_mom_cm();
+      auto moi_body_principal_cm = sliceMoi_body_principal_cm();
+      auto w_body_cm = sliceW_body_cm();
+      auto w_body_dot_cm = sliceW_body_dot_cm();
+      auto quat_cm = sliceQuat_cm();
+
+      ViewMatrixType device_moi_cm( "device_moi_cm", x_cm.size(), 9);
+      ViewMatrixType device_moi_principal_cm( "device_moi_principal_cm", x_cm.size(), 3);
+      ViewMatrixType device_rot_mat_cm( "device_rot_mat_cm", x_cm.size(), 9);
+
+      auto device_moi_initialize_func = KOKKOS_LAMBDA( const int i )
+        {
+          for (int j=0; j < 9; j++){
+            device_moi_cm( i, j ) = moi_body_mat_cm( i, j );
+          }
+        };
+      Kokkos::RangePolicy<execution_space> policy( 0, x_cm.size() );
+      Kokkos::parallel_for( "device_moi_initialize", policy,
+                            device_moi_initialize_func );
+
+      // Create host mirrors of device views.
+      ViewMatrixType::HostMirror h_moi_cm = Kokkos::create_mirror_view( device_moi_cm );
+      ViewMatrixType::HostMirror h_moi_principal_cm = Kokkos::create_mirror_view( device_moi_principal_cm );
+      ViewMatrixType::HostMirror h_rot_mat_cm = Kokkos::create_mirror_view( device_rot_mat_cm );
+      compute_eigen_values_and_eigen_vectors( x_cm.size(), h_moi_cm, h_moi_principal_cm, h_rot_mat_cm );
+
+      // Deep copy host views to device views.
+      Kokkos::deep_copy( device_moi_cm,  h_moi_cm );
+      Kokkos::deep_copy( device_moi_principal_cm, h_moi_principal_cm );
+      Kokkos::deep_copy( device_rot_mat_cm, h_rot_mat_cm );
+
+      // Copy the device views back into the property slices
+      auto copy_device_memory_to_slice_func = KOKKOS_LAMBDA( const int i )
+        {
+          for (int j=0; j < 9; j++){
+            rot_mat_cm( i, j ) = device_rot_mat_cm( i, j );
+          }
+          moi_body_principal_cm( i, 0 ) = device_moi_principal_cm( i, 0 );
+          moi_body_principal_cm( i, 1 ) = device_moi_principal_cm( i, 1 );
+          moi_body_principal_cm( i, 2 ) = device_moi_principal_cm( i, 2 );
+
+          // Further set the quaternion from the principal orientation
+          // of the rotation matrix
+          double trace = rot_mat_cm ( i, 0 ) + rot_mat_cm ( i, 4 ) + rot_mat_cm ( i, 8 );  // rot_mat_cm[0][0] + rot_mat_cm[1][1] + rot_mat_cm[2][2]
+
+          if (trace > 0.0) {
+            double S = std::sqrt(trace + 1.0) * 2.0;  // S = 4 * w
+            quat_cm( i, 0 ) = 0.25 * S;
+            quat_cm( i, 1 ) = (rot_mat_cm( i, 7 ) - rot_mat_cm( i, 7 )) / S;
+            quat_cm( i, 2 ) = (rot_mat_cm( i, 2 ) - rot_mat_cm( i, 2 )) / S;
+            quat_cm( i, 3 ) = (rot_mat_cm( i, 3 ) - rot_mat_cm( i, 3 )) / S;
+          } else if ((rot_mat_cm( i, 0 ) > rot_mat_cm(i, 4)) && (rot_mat_cm(i, 0) > rot_mat_cm(i, 8))) {
+            double S = std::sqrt(1.0 + rot_mat_cm(i, 0) - rot_mat_cm(i, 4) - rot_mat_cm(i, 8)) * 2.0;  // S = 4 * x
+            quat_cm( i, 0 ) = (rot_mat_cm( i, 7 ) - rot_mat_cm( i, 5 )) / S;
+            quat_cm( i, 1 ) = 0.25 * S;
+            quat_cm( i, 2 ) = (rot_mat_cm( i, 1 ) + rot_mat_cm( i, 3 )) / S;
+            quat_cm( i, 3 ) = (rot_mat_cm( i, 2 ) + rot_mat_cm( i, 6 )) / S;
+          } else if (rot_mat_cm(i, 4) > rot_mat_cm(i, 8)) {
+            double S = std::sqrt(1.0 + rot_mat_cm(i, 4) - rot_mat_cm(i, 0) - rot_mat_cm(i, 8)) * 2.0;  // S = 4 * y
+            quat_cm( i, 0 ) = (rot_mat_cm( i, 2 ) - rot_mat_cm( i, 6 )) / S;
+            quat_cm( i, 1 ) = (rot_mat_cm( i, 1 ) + rot_mat_cm( i, 3 )) / S;
+            quat_cm( i, 2 ) = 0.25 * S;
+            quat_cm( i, 3 ) = (rot_mat_cm( i, 5 ) + rot_mat_cm( i, 7 )) / S;
+          } else {
+            double S = std::sqrt(1.0 + rot_mat_cm(i, 8) - rot_mat_cm(i, 0) - rot_mat_cm(i, 4)) * 2.0;  // S = 4 * z
+            quat_cm( i, 0 ) = (rot_mat_cm( i, 3 ) - rot_mat_cm( i, 1 )) / S;
+            quat_cm( i, 1 ) = (rot_mat_cm( i, 2 ) + rot_mat_cm( i, 6 )) / S;
+            quat_cm( i, 2 ) = (rot_mat_cm( i, 5 ) + rot_mat_cm( i, 7 )) / S;
+            quat_cm( i, 3 ) = 0.25 * S;
+          }
+
+          // Optional: normalize the quaternion
+          double norm = std::sqrt(quat_cm( i, 0 )*quat_cm( i, 0 ) + quat_cm( i, 1 )*quat_cm( i, 1 ) + quat_cm( i, 2 )*quat_cm( i, 2 ) + quat_cm( i, 3 )*quat_cm( i, 3 ));
+          for (int j = 0; j < 4; ++j)
+            quat_cm( i, j ) /= norm;
+
+        };
+      Kokkos::parallel_for( "device_copy_to_slice", policy,
+                            copy_device_memory_to_slice_func );
+    }
+
     void set_particle_velocities() {
       auto x_p = slicePosition();
       auto u_p = sliceVelocity();
@@ -707,12 +863,26 @@ namespace CabanaRigidBody
       auto force_cm = sliceForce_cm();
       auto torque_cm = sliceTorque_cm();
       auto ang_mom_cm = sliceAng_mom_cm();
+      auto moi_body_principal_cm = sliceMoi_body_principal_cm();
+      auto w_body_cm = sliceW_body_cm();
+      auto w_body_dot_cm = sliceW_body_dot_cm();
+      auto quat_cm = sliceQuat_cm();
 
       auto particle_velocities_func = KOKKOS_LAMBDA( const int i )
         {
           w_cm( i, 0 ) = w_cm_input[ 3 * i + 0 ];
           w_cm( i, 1 ) = w_cm_input[ 3 * i + 1 ];
           w_cm( i, 2 ) = w_cm_input[ 3 * i + 2 ];
+
+          // Compute the angular velocity in body frame too
+          double R[9] = {0.};
+          for ( std::size_t j = 0; j < 9; ++j )
+            {
+              R[j] = rot_mat_cm( i, j );
+            }
+          w_body_cm( i, 0 ) = R[0] * w_cm( i, 0 ) + R[3] * w_cm( i, 1 ) + R[6] * w_cm( i, 2 );
+          w_body_cm( i, 1 ) = R[1] * w_cm( i, 0 ) + R[4] * w_cm( i, 1 ) + R[7] * w_cm( i, 2 );
+          w_body_cm( i, 2 ) = R[2] * w_cm( i, 0 ) + R[6] * w_cm( i, 1 ) + R[8] * w_cm( i, 2 );
 
           ang_mom_cm( i, 0 ) = (moi_global_mat_cm ( i, 0 ) * w_cm ( i, 0 ) +
                                 moi_global_mat_cm ( i, 1 ) * w_cm ( i, 1 ) +
@@ -777,8 +947,8 @@ namespace CabanaRigidBody
     }
 
     void output_rb_properties(  const int output_step,
-                  const double output_time,
-                  const bool use_reference = true )
+                                const double output_time,
+                                const bool use_reference = true )
     {
       // _output_timer.start();
 
@@ -898,116 +1068,116 @@ namespace CabanaRigidBody
   };
 
 
-auto print_particle_properties(auto particles){
-  auto x_p = particles->slicePosition();
-  auto u_p = particles->sliceVelocity();
-  auto au_p = particles->sliceAcceleration();
-  auto force_p = particles->sliceForce();
-  auto m_p = particles->sliceMass();
-  auto rho_p = particles->sliceDensity();
-  auto p_p = particles->slicePressure();
-  auto h_p = particles->sliceH();
-  auto wij_p = particles->sliceWij();
-  auto arho_p = particles->sliceArho();
-  auto x_body_p = particles.sliceX_body();
-  auto u_body_p = particles.sliceU_body();
-  auto body_id_p = particles.sliceBody_id();
+  auto print_particle_properties(auto particles){
+    auto x_p = particles->slicePosition();
+    auto u_p = particles->sliceVelocity();
+    auto au_p = particles->sliceAcceleration();
+    auto force_p = particles->sliceForce();
+    auto m_p = particles->sliceMass();
+    auto rho_p = particles->sliceDensity();
+    auto p_p = particles->slicePressure();
+    auto h_p = particles->sliceH();
+    auto wij_p = particles->sliceWij();
+    auto arho_p = particles->sliceArho();
+    auto x_body_p = particles.sliceX_body();
+    auto u_body_p = particles.sliceU_body();
+    auto body_id_p = particles.sliceBody_id();
 
 
-  for ( std::size_t i = 0; i < x_p.size(); ++i )
-    {
-      std::cout << "position, mass, h_val, real_sin, sin_appr of particle " << i << " are: "
-                << x_p(i, 0) << ", "
-                <<  m_p(i) << ", "
-                <<  h_p(i) << ", "
-                <<  wij_p(i) << ", "
-                <<  p_p(i) << ", "
-                << std::endl;
-    }
-}
+    for ( std::size_t i = 0; i < x_p.size(); ++i )
+      {
+        std::cout << "position, mass, h_val, real_sin, sin_appr of particle " << i << " are: "
+                  << x_p(i, 0) << ", "
+                  <<  m_p(i) << ", "
+                  <<  h_p(i) << ", "
+                  <<  wij_p(i) << ", "
+                  <<  p_p(i) << ", "
+                  << std::endl;
+      }
+  }
 
 
-auto print_rigid_body_properties(auto particles){
-  auto x_p = particles.slicePosition();
-  auto u_p = particles.sliceVelocity();
-  auto au_p = particles.sliceAcceleration();
-  auto force_p = particles.sliceForce();
-  auto m_p = particles.sliceMass();
-  auto rho_p = particles.sliceDensity();
-  auto p_p = particles.slicePressure();
-  auto h_p = particles.sliceH();
-  auto wij_p = particles.sliceWij();
-  auto arho_p = particles.sliceArho();
-  auto x_body_p = particles.sliceX_body();
-  auto body_id_p = particles.sliceBody_id();
+  auto print_rigid_body_properties(auto particles){
+    auto x_p = particles.slicePosition();
+    auto u_p = particles.sliceVelocity();
+    auto au_p = particles.sliceAcceleration();
+    auto force_p = particles.sliceForce();
+    auto m_p = particles.sliceMass();
+    auto rho_p = particles.sliceDensity();
+    auto p_p = particles.slicePressure();
+    auto h_p = particles.sliceH();
+    auto wij_p = particles.sliceWij();
+    auto arho_p = particles.sliceArho();
+    auto x_body_p = particles.sliceX_body();
+    auto body_id_p = particles.sliceBody_id();
 
-  auto rb_limits = particles.sliceRb_limits();
-  auto m_cm = particles.sliceM_cm();
-  auto x_cm = particles.sliceX_cm();
-  auto u_cm = particles.sliceU_cm();
-  auto w_cm = particles.sliceW_cm();
-  auto rot_mat_cm = particles.sliceRot_mat_cm();
-  auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
-  auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
-  auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
-  auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
-  auto force_cm = particles.sliceForce_cm();
-  auto torque_cm = particles.sliceTorque_cm();
-  auto ang_mom_cm = particles.sliceAng_mom_cm();
+    auto rb_limits = particles.sliceRb_limits();
+    auto m_cm = particles.sliceM_cm();
+    auto x_cm = particles.sliceX_cm();
+    auto u_cm = particles.sliceU_cm();
+    auto w_cm = particles.sliceW_cm();
+    auto rot_mat_cm = particles.sliceRot_mat_cm();
+    auto moi_body_mat_cm = particles.sliceMoi_body_mat_cm();
+    auto moi_global_mat_cm = particles.sliceMoi_global_mat_cm();
+    auto moi_inv_body_mat_cm = particles.sliceMoi_inv_body_mat_cm();
+    auto moi_inv_global_mat_cm = particles.sliceMoi_inv_global_mat_cm();
+    auto force_cm = particles.sliceForce_cm();
+    auto torque_cm = particles.sliceTorque_cm();
+    auto ang_mom_cm = particles.sliceAng_mom_cm();
 
-  for ( std::size_t i = 0; i < m_cm.size(); ++i )
-    {
-      std::cout << "body " << i << " has following properties: "
-                << std::endl
-                <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1) << ", " << x_cm(i, 2)
-                << std::endl
-                << "A total mass of " << m_cm(i)
-                << std::endl;
+    for ( std::size_t i = 0; i < m_cm.size(); ++i )
+      {
+        std::cout << "body " << i << " has following properties: "
+                  << std::endl
+                  <<  "x cm is " << x_cm(i, 0) << ", " <<  x_cm(i, 1) << ", " << x_cm(i, 2)
+                  << std::endl
+                  << "A total mass of " << m_cm(i)
+                  << std::endl;
 
-      std::cout << "Rotation matrix of " << i << " is:"
-                << std::endl;
-      for ( std::size_t j = 0; j < 9; ++j )
-        {
-          std::cout <<  rot_mat_cm(i, j) << ", " ;
-        }
-      std::cout << std::endl;
+        std::cout << "Rotation matrix of " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 9; ++j )
+          {
+            std::cout <<  rot_mat_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
 
-      std::cout << "Ang velocity of " << i << " is:"
-                << std::endl;
-      for ( std::size_t j = 0; j < 3; ++j )
-        {
-          std::cout <<  w_cm(i, j) << ", " ;
-        }
-      std::cout << std::endl;
+        std::cout << "Ang velocity of " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 3; ++j )
+          {
+            std::cout <<  w_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
 
-      std::cout << "Angular momentum of " << i << " is:"
-                << std::endl;
-      for ( std::size_t j = 0; j < 3; ++j )
-        {
-          std::cout <<  ang_mom_cm(i, j) << ", " ;
-        }
-      std::cout << std::endl;
+        std::cout << "Angular momentum of " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 3; ++j )
+          {
+            std::cout <<  ang_mom_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
 
-      std::cout << "MOI inv global mat cm of " << i << " is:"
-                << std::endl;
-      for ( std::size_t j = 0; j < 9; ++j )
-        {
-          std::cout <<  moi_inv_global_mat_cm(i, j) << ", " ;
-        }
-      std::cout << std::endl;
-      std::cout << "===========================" << std::endl;
-      std::cout << "===========================" << std::endl;
-      std::cout << "===========================" << std::endl;
+        std::cout << "MOI inv global mat cm of " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 9; ++j )
+          {
+            std::cout <<  moi_inv_global_mat_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
+        std::cout << "===========================" << std::endl;
+        std::cout << "===========================" << std::endl;
+        std::cout << "===========================" << std::endl;
 
-      // std::cout << "Moment of inertia matrix of " << i << " is:"
-      //           << std::endl;
-      // for ( std::size_t j = 0; j < 9; ++j )
-      //   {
-      //     std::cout <<  moi_body_mat_cm(i, j) << ", " ;
-      //   }
-      // std::cout << std::endl;
-    }
-}
+        // std::cout << "Moment of inertia matrix of " << i << " is:"
+        //           << std::endl;
+        // for ( std::size_t j = 0; j < 9; ++j )
+        //   {
+        //     std::cout <<  moi_body_mat_cm(i, j) << ", " ;
+        //   }
+        // std::cout << std::endl;
+      }
+  }
 
 
 
