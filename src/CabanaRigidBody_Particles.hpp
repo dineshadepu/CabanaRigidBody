@@ -610,9 +610,11 @@ namespace CabanaRigidBody
             }
           Eigen::EigenSolver<Eigen::Matrix3d> es(I);
 
+          std::cout << "Inside the eigenvalues computation function" << std::endl;
           std::cout << "MOI is : " << I << std::endl;
           std::cout << "eigen values are: " << es.eigenvalues() << std::endl;
           std::cout << "eigen vectors are: " << es.eigenvectors() << std::endl;
+          std::cout << "===========================================" << std::endl;
 
           moi_principal( i, 0 ) = es.eigenvalues()[0].real();
           moi_principal( i, 1 ) = es.eigenvalues()[1].real();
@@ -1124,6 +1126,10 @@ namespace CabanaRigidBody
     auto force_cm = particles.sliceForce_cm();
     auto torque_cm = particles.sliceTorque_cm();
     auto ang_mom_cm = particles.sliceAng_mom_cm();
+    auto moi_body_principal_cm = particles.sliceMoi_body_principal_cm();
+    auto w_body_cm = particles.sliceW_body_cm();
+    auto w_body_dot_cm = particles.sliceW_body_dot_cm();
+    auto quat_cm = particles.sliceQuat_cm();
 
     for ( std::size_t i = 0; i < m_cm.size(); ++i )
       {
@@ -1163,6 +1169,21 @@ namespace CabanaRigidBody
         for ( std::size_t j = 0; j < 9; ++j )
           {
             std::cout <<  moi_inv_global_mat_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
+        std::cout << "The quaternion of " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 4; ++j )
+          {
+            std::cout <<  quat_cm(i, j) << ", " ;
+          }
+        std::cout << std::endl;
+
+        std::cout << "MOI principal " << i << " is:"
+                  << std::endl;
+        for ( std::size_t j = 0; j < 3; ++j )
+          {
+            std::cout <<  moi_body_principal_cm(i, j) << ", " ;
           }
         std::cout << std::endl;
         std::cout << "===========================" << std::endl;
