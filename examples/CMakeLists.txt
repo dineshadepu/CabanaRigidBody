@@ -13,12 +13,16 @@ target_link_libraries(Problem04TwoBodiesFreelyTranslatingRigidBody3D PRIVATE cab
 add_executable(Problem05DzhanibekovEffectRigidBody3D problem_05_Dzhanibekov_effect_rigid_body_3d.cpp)
 target_link_libraries(Problem05DzhanibekovEffectRigidBody3D PRIVATE cabanarigidbody)
 
+add_executable(Problem06TwoRigidBodiesColliding3D problem_06_two_rigid_bodies_colliding_3d.cpp)
+target_link_libraries(Problem06TwoRigidBodiesColliding3D PRIVATE cabanarigidbody)
+
 install(TARGETS
   Problem01FreelyTranslatingRigidBody2D
   Problem02FreelyTranslatingRigidBody3D
   Problem03FreelyTranlatingBodyFrameEquationsRigidBody3D
   Problem04TwoBodiesFreelyTranslatingRigidBody3D
   Problem05DzhanibekovEffectRigidBody3D
+  Problem06TwoRigidBodiesColliding3D
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_definitions(-w)

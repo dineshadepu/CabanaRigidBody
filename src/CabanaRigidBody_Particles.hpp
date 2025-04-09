@@ -193,6 +193,13 @@ namespace CabanaRigidBody
       return Cabana::slice<0>( _body_id, "body_id" );
     }
 
+    auto sliceRadius() {
+      return Cabana::slice<0>( _radius, "radius" );
+    }
+    auto sliceRadius() const{
+      return Cabana::slice<0>( _radius, "radius" );
+    }
+
     // Rigid body center of mass properties
     auto sliceRb_limits() {
       return Cabana::slice<0>( _rb_limits, "rb_limits" );
@@ -926,7 +933,9 @@ namespace CabanaRigidBody
                                                               slicePressure(),
                                                               sliceH(),
                                                               sliceWij(),
-                                                              sliceArho());
+                                                              sliceArho(),
+                                                              sliceBody_id(),
+                                                              sliceRadius());
       // #else
       // #ifdef Cabana_ENABLE_SILO
       //       Cabana::Grid::Experimental::SiloParticleOutput::
@@ -1015,6 +1024,8 @@ namespace CabanaRigidBody
     // particle properties corresponding to rigid body dynamics
     aosoa_vec_double_type _x_body; // position vector in body frame
     aosoa_double_type _body_id; // position vector in body frame
+    // particle properties corresponding to rigid body contact
+    aosoa_double_type _radius; // position vector in body frame
 
     int _no_of_rb;
     aosoa_vec_2_double_type _rb_limits; // indices limit in the main particles to differentiate bodies
@@ -1047,6 +1058,7 @@ namespace CabanaRigidBody
     // auto arho_p = particles.sliceArho();
     // auto x_body_p = particles.sliceX_body();
     // auto body_id_p = particles.sliceBody_id();
+    // auto radius_p = particles.sliceRadius();
 
     // auto rb_limits = particles.sliceRb_limits();
     // auto m_cm = particles.sliceM_cm();
