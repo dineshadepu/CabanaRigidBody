@@ -80,12 +80,10 @@ namespace CabanaRigidBody
                           total_force_torque_func );
   }
 
-  template <class ParticleType, class NeighListType>
+  template <class ParticleType, class NeighListType, class ExecSpace>
   void compute_force_on_rigid_bodies(ParticleType& particles,
-                                     const NeighListType& neigh_list,
-                                     const Kokkos::DefaultExecutionSpace& exec_space)
+                                     const NeighListType& neigh_list)
   {
-
     auto x_p = particles.slicePosition();
     auto u_p = particles.sliceVelocity();
     auto au_p = particles.sliceAcceleration();
@@ -200,7 +198,7 @@ namespace CabanaRigidBody
 
 
 
-    Kokkos::RangePolicy<exec_space> policy(0, u_p.size());
+    Kokkos::RangePolicy<ExecSpace> policy(0, u_p.size());
 
 
     Cabana::neighbor_parallel_for( policy,

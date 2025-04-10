@@ -116,7 +116,7 @@ auto create_particles(){
 /*
 
  */
-void Problem04DzhanibekovEffectRigidBody3D()
+void Problem04TwoBodiesFreelyTranslatingRigidBody3D()
 {
   int comm_rank = -1;
   MPI_Comm_rank( MPI_COMM_WORLD, &comm_rank );
@@ -231,7 +231,7 @@ int main( int argc, char* argv[] )
   Kokkos::initialize( argc, argv );
 
   // run the problem
-  Problem04DzhanibekovEffectRigidBody3D();
+  Problem04TwoBodiesFreelyTranslatingRigidBody3D();
 
   Kokkos::finalize();
   MPI_Finalize();

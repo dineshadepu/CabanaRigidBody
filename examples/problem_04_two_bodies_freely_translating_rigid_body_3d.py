@@ -23,11 +23,11 @@ os.system('cd ../')
 output_dir = sys.argv[1]
 make_directory_if_not_exists(output_dir)
 
-shutil.copy('./build/examples/Problem04DzhanibekovEffectRigidBody3D', output_dir)
+shutil.copy('./build/examples/Problem04TwoBodiesFreelyTranslatingRigidBody3D', output_dir)
 
 # executable args
 cli_args = ' '.join(element.split("=")[1] for element in sys.argv[2:])
-os.system('cd ' + output_dir + '&& ./Problem04DzhanibekovEffectRigidBody3D ' + cli_args)
+os.system('cd ' + output_dir + '&& ./Problem04TwoBodiesFreelyTranslatingRigidBody3D ' + cli_args)
 
 # # =====================================================
 # # 3. post process the output file and plot

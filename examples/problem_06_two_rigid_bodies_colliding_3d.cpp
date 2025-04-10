@@ -79,6 +79,7 @@ auto create_particles(double body_length, double body_height, double body_depth,
   auto arho_p = particles.sliceArho();
   auto x_body_p = particles.sliceX_body();
   auto body_id_p = particles.sliceBody_id();
+  auto radius_p = particles.sliceRadius();
 
   auto init_particles_positions = KOKKOS_LAMBDA( const int pid )
     {
@@ -102,6 +103,7 @@ auto create_particles(double body_length, double body_height, double body_depth,
       x_body_p ( pid, 2 ) = 0.;
 
       body_id_p ( pid )= body_id[pid];
+      radius_p ( pid )= body_spacing * 0.5;
     };
   Kokkos::RangePolicy<ExecutionSpace> policy(0, no_particles);
   Kokkos::parallel_for("init_particles_positions", policy, init_particles_positions );
@@ -112,7 +114,7 @@ auto create_particles(double body_length, double body_height, double body_depth,
 /*
 
  */
-void Problem04DzhanibekovEffectRigidBody3D()
+void Problem06TwoRigidBodiesColliding3D()
 {
   int comm_rank = -1;
   MPI_Comm_rank( MPI_COMM_WORLD, &comm_rank );
@@ -156,7 +158,7 @@ void Problem04DzhanibekovEffectRigidBody3D()
   particles.set_cm_linear_velocity(lin_vel);
   // particles.set_cm_angular_velocity(ang_vel);
   // CabanaRigidBody::print_particle_properties(particles);
-  CabanaRigidBody::print_rigid_body_properties(particles);
+  // CabanaRigidBody::print_rigid_body_properties(particles);
 
   // =================================================================
   // //                   3. create the neighbours
@@ -164,8 +166,9 @@ void Problem04DzhanibekovEffectRigidBody3D()
   double scale_factor = 1.;
   double neighborhood_radius = scale_factor * h;
   double spacing = body_spacing;
-  double grid_min[3] = { -3. * body_length, -3. * body_height, -3. * body_depth};
-  double grid_max[3] = { 3. * body_length, 3. * body_height, 3. * body_depth};
+  double fac = 4.;
+  double grid_min[3] = { -fac * body_length, -fac * body_height, -fac * body_depth};
+  double grid_max[3] = { fac * body_length, fac * body_height, fac * body_depth};
 
   double cell_ratio = 1.0;
   using ListAlgorithm = Cabana::FullNeighborTag;
@@ -174,14 +177,13 @@ void Problem04DzhanibekovEffectRigidBody3D()
                                       Cabana::TeamOpTag>;
 
   auto positions = particles.slicePosition();
-  auto neighbours = std::make_shared<ListType>( positions, 0, positions.size(), neighborhood_radius,
+  auto neighbours = ListType( positions, 0, positions.size(), neighborhood_radius,
                         cell_ratio, grid_min, grid_max );
 
 
   // ====================================================
   //                   4. The time loop
   // ====================================================
-  Kokkos::DefaultExecutionSpace exec;
   auto dt = 1e-4;
   auto final_time = 1.;
   // auto final_time = 2. * M_PI;
@@ -196,12 +198,15 @@ void Problem04DzhanibekovEffectRigidBody3D()
   // Main timestep loop.
   for ( int step = 0; step <= num_steps; step++ )
     {
+      // Find the minimum and maximum of x, y and z
+
       // update the neighbours
-      neighbours->build( positions, 0, positions.size(), neighborhood_radius,
+      neighbours.build( positions, 0, positions.size(), neighborhood_radius,
                          cell_ratio, grid_min, grid_max );
 
-      CabanaRigidBody::compute_force_on_rigid_bodies(particles, neighbours, exec);
+      CabanaRigidBody::compute_force_on_rigid_bodies<decltype(particles), decltype(neighbours), exec_space>(particles, neighbours);
 
+      CabanaRigidBody::compute_effective_force_and_torque_on_rigid_body<decltype(particles), exec_space>(particles);
       // integrator.euler_stage1( particles );
       // integrator.euler_stage1_quaternion( particles );
 
@@ -237,7 +242,7 @@ int main( int argc, char* argv[] )
   Kokkos::initialize( argc, argv );
 
   // run the problem
-  Problem04DzhanibekovEffectRigidBody3D();
+  Problem06TwoRigidBodiesColliding3D();
 
   Kokkos::finalize();
   MPI_Finalize();

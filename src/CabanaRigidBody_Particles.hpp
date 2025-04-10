@@ -335,6 +335,7 @@ namespace CabanaRigidBody
       _arho.resize( n );
       _x_body.resize( n );
       _body_id.resize( n );
+      _radius.resize( n );
 
       _no_of_rb = p;
       _rb_limits.resize( p );
